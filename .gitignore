@@ -27,4 +27,5 @@ ircserv
 *.d
 
 .cursor/rules/
+eval.txt
 
