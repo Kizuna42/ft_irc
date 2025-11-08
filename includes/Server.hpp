@@ -4,7 +4,6 @@
 #include <string>
 #include <map>
 #include <vector>
-#include <set>
 #include <poll.h>
 
 class Client;
@@ -42,7 +41,7 @@ public:
     Channel* getChannel(const std::string& name);
     Channel* createChannel(const std::string& name);
     void removeChannel(const std::string& name);
-    void broadcastToClientChannels(Client* client, const std::string& message, Client* exclude);
+    void broadcastToClientChannels(Client* client, const std::string& message, Client* exclude = NULL);
 
     // Misc
     const std::string& getPassword() const;
