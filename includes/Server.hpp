@@ -5,6 +5,7 @@
 #include <map>
 #include <vector>
 #include <poll.h>
+#include <cstddef>
 
 class Client;
 class Channel;
@@ -20,6 +21,7 @@ private:
     std::map<std::string, Channel*> _channels;
     CommandHandler* _commandHandler;
     bool _running;
+    static const size_t MAX_SEND_BUFFER_SIZE = 16384;
 
 public:
     Server(int port, const std::string& password);

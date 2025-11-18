@@ -6,6 +6,19 @@
 #include <sstream>
 #include <cstdlib>
 
+namespace {
+void appendAppliedMode(std::string& appliedModes, char& currentSign, bool adding, char modeChar)
+{
+	char signChar = adding ? '+' : '-';
+	if (appliedModes.empty() || currentSign != signChar)
+	{
+		appliedModes += signChar;
+		currentSign = signChar;
+	}
+	appliedModes += modeChar;
+}
+}
+
 void CommandHandler::handleKick(Client *client, const Message &msg)
 {
 	// Check parameters
@@ -252,6 +265,7 @@ void CommandHandler::handleMode(Client *client, const Message &msg)
 	char currentSign = '\0';
 	std::string appliedModes;
 	std::vector<std::string> appliedParams;
+	bool modeChanged = false;
 
 	for (size_t i = 0; i < modeStr.length(); ++i)
 	{
@@ -268,22 +282,17 @@ void CommandHandler::handleMode(Client *client, const Message &msg)
 			continue;
 		}
 
-		char signChar = adding ? '+' : '-';
-		if (appliedModes.empty() || currentSign != signChar)
-		{
-			appliedModes += signChar;
-			currentSign = signChar;
-		}
-
 		if (mode == 'i')
 		{
 			channel->setInviteOnly(adding);
-			appliedModes += mode;
+			modeChanged = true;
+			appendAppliedMode(appliedModes, currentSign, adding, mode);
 		}
 		else if (mode == 't')
 		{
 			channel->setTopicRestricted(adding);
-			appliedModes += mode;
+			modeChanged = true;
+			appendAppliedMode(appliedModes, currentSign, adding, mode);
 		}
 		else if (mode == 'k')
 		{
@@ -295,14 +304,16 @@ void CommandHandler::handleMode(Client *client, const Message &msg)
 					return;
 				}
 				channel->setKey(params[paramIndex]);
-				appliedModes += mode;
+				modeChanged = true;
+				appendAppliedMode(appliedModes, currentSign, adding, mode);
 				appliedParams.push_back(params[paramIndex]);
 				paramIndex++;
 			}
 			else
 			{
 				channel->setKey("");
-				appliedModes += mode;
+				modeChanged = true;
+				appendAppliedMode(appliedModes, currentSign, adding, mode);
 			}
 		}
 		else if (mode == 'o')
@@ -329,7 +340,8 @@ void CommandHandler::handleMode(Client *client, const Message &msg)
 				channel->addOperator(targetClient);
 			else
 				channel->removeOperator(targetClient);
-			appliedModes += mode;
+			modeChanged = true;
+			appendAppliedMode(appliedModes, currentSign, adding, mode);
 			appliedParams.push_back(params[paramIndex]);
 			paramIndex++;
 		}
@@ -350,14 +362,16 @@ void CommandHandler::handleMode(Client *client, const Message &msg)
 					continue;
 				}
 				channel->setUserLimit(limit);
-				appliedModes += mode;
+				modeChanged = true;
+				appendAppliedMode(appliedModes, currentSign, adding, mode);
 				appliedParams.push_back(params[paramIndex]);
 				paramIndex++;
 			}
 			else
 			{
 				channel->setUserLimit(0);
-				appliedModes += mode;
+				modeChanged = true;
+				appendAppliedMode(appliedModes, currentSign, adding, mode);
 			}
 		}
 		else
@@ -367,7 +381,7 @@ void CommandHandler::handleMode(Client *client, const Message &msg)
 	}
 
 	// Broadcast mode change
-	if (!appliedModes.empty())
+	if (modeChanged && appliedModes.length() > 1)
 	{
 		std::ostringstream msg;
 		msg << ":" << client->getPrefix() << " MODE " << channelName << " " << appliedModes;

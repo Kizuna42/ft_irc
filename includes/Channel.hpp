@@ -6,10 +6,12 @@
 # include <set>
 
 class Client;
+class Server;
 
 class Channel {
 private:
 	std::string				_name;
+	Server*					_server;
 	std::string				_topic;
 	std::string				_key;
 	size_t					_userLimit;
@@ -21,7 +23,7 @@ private:
 
 public:
 	// Constructor & Destructor
-	Channel(const std::string& name);
+	Channel(const std::string& name, Server* server);
 	~Channel();
 
 	// Getters

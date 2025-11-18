@@ -56,6 +56,9 @@ void CommandHandler::execute(Client* client, const Message& msg) {
 		handleTopic(client, msg);
 	} else if (command == "MODE") {
 		handleMode(client, msg);
+	} else {
+		std::string target = client->getNickname().empty() ? "*" : client->getNickname();
+		_server->sendToClient(client, createReply(ERR::UNKNOWNCOMMAND, target, command + " :Unknown command"));
 	}
 }
 

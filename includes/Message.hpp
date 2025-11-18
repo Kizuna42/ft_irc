@@ -44,6 +44,7 @@ namespace ERR {
 	const int NOSUCHNICK = 401;
 	const int NOSUCHCHANNEL = 403;
 	const int CANNOTSENDTOCHAN = 404;
+	const int UNKNOWNCOMMAND = 421;
 	const int NORECIPIENT = 411;
 	const int NOTEXTTOSEND = 412;
 	const int NONICKNAMEGIVEN = 431;

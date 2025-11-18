@@ -40,23 +40,41 @@ void Server::start() {
 			break;
 		}
 
-		for (size_t i = 0; i < _pollFds.size(); ++i) {
-			if (_pollFds[i].revents == 0)
+		for (size_t i = 0; i < _pollFds.size(); ) {
+			struct pollfd current = _pollFds[i];
+			if (current.revents == 0) {
+				++i;
 				continue;
-
-			if (_pollFds[i].fd == _serverFd) {
-				// New connection
-				if (_pollFds[i].revents & POLLIN)
-					handleNewConnection();
-			} else {
-				// Client data
-				if (_pollFds[i].revents & POLLIN)
-					handleClientData(_pollFds[i].fd);
-				if (_pollFds[i].revents & POLLOUT)
-					handleClientSend(_pollFds[i].fd);
-				if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
-					closeConnection(_pollFds[i].fd);
 			}
+
+			bool closed = false;
+
+			if (current.fd == _serverFd) {
+				if (current.revents & POLLIN)
+					handleNewConnection();
+				++i;
+				continue;
+			}
+
+			if (current.revents & POLLIN) {
+				handleClientData(current.fd);
+				if (!getClient(current.fd))
+					closed = true;
+			}
+
+			if (!closed && (current.revents & POLLOUT)) {
+				handleClientSend(current.fd);
+				if (!getClient(current.fd))
+					closed = true;
+			}
+
+			if (!closed && (current.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+				closeConnection(current.fd, "Poll error");
+				closed = true;
+			}
+
+			if (!closed)
+				++i;
 		}
 	}
 }
@@ -151,8 +169,16 @@ void Server::disconnectClient(Client* client, const std::string& reason) {
 }
 
 void Server::sendToClient(Client* client, const std::string& message) {
-	if (client)
-		client->appendSendBuffer(message);
+	if (!client || message.empty())
+		return;
+
+	if (client->getSendBuffer().size() + message.size() > MAX_SEND_BUFFER_SIZE) {
+		std::cerr << "Warning: send buffer exceeded for fd " << client->getFd() << std::endl;
+		closeConnection(client->getFd(), "Send buffer exceeded");
+		return;
+	}
+
+	client->appendSendBuffer(message);
 }
 
 // Channel management
@@ -166,7 +192,7 @@ Channel* Server::getChannel(const std::string& name) {
 Channel* Server::createChannel(const std::string& name) {
 	Channel* channel = getChannel(name);
 	if (!channel) {
-		channel = new Channel(name);
+		channel = new Channel(name, this);
 		_channels[name] = channel;
 	}
 	return channel;
@@ -194,7 +220,7 @@ void Server::broadcastToClientChannels(Client* client, const std::string& messag
 		for (std::vector<Client*>::const_iterator mit = members.begin(); mit != members.end(); ++mit) {
 			Client* member = *mit;
 			if (delivered.insert(member).second)
-				member->appendSendBuffer(message);
+				sendToClient(member, message);
 		}
 	}
 }
@@ -257,7 +283,13 @@ void Server::handleNewConnection() {
 		return;
 	}
 
-	setNonBlocking(clientFd);
+	try {
+		setNonBlocking(clientFd);
+	} catch (const std::exception& e) {
+		std::cerr << "Error: " << e.what() << std::endl;
+		close(clientFd);
+		return;
+	}
 
 	// Create client
 	try {
@@ -287,14 +319,17 @@ void Server::handleClientData(int fd) {
 	char buffer[512];
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
 
-	if (bytes <= 0) {
-		if (bytes == 0) {
-			std::cout << "Client disconnected (fd: " << fd << ")" << std::endl;
-			closeConnection(fd, "Connection closed");
-		} else {
-			std::cerr << "Error: recv failed: " << strerror(errno) << std::endl;
-			closeConnection(fd, "Read error");
-		}
+	if (bytes < 0) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+			return;
+		std::cerr << "Error: recv failed: " << strerror(errno) << std::endl;
+		closeConnection(fd, "Read error");
+		return;
+	}
+
+	if (bytes == 0) {
+		std::cout << "Client disconnected (fd: " << fd << ")" << std::endl;
+		closeConnection(fd, "Connection closed");
 		return;
 	}
 
@@ -339,7 +374,8 @@ void Server::closeConnection(int fd, const std::string& reason) {
 
 // Utility
 void Server::setNonBlocking(int fd) {
-	fcntl(fd, F_SETFL, O_NONBLOCK);
+	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1)
+		throw std::runtime_error("Error: failed to set non-blocking mode");
 }
 
 void Server::processClientMessage(Client* client, const std::string& message) {

@@ -26,6 +26,6 @@ ircserv
 # Dependencies
 *.d
 
-.cursor/rules/
-eval.txt
+evaluation.txt
+subject.txt
 

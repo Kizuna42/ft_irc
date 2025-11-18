@@ -1,9 +1,11 @@
 #include "Channel.hpp"
 #include "Client.hpp"
+#include "Server.hpp"
 #include <algorithm>
 
-Channel::Channel(const std::string& name) : _name(name), _userLimit(0),
-											 _inviteOnly(false), _topicRestricted(true) {
+Channel::Channel(const std::string& name, Server* server)
+	: _name(name), _server(server), _userLimit(0),
+	  _inviteOnly(false), _topicRestricted(true) {
 }
 
 Channel::~Channel() {
@@ -108,9 +110,13 @@ bool Channel::isInvited(const std::string& nickname) const {
 
 // Utility
 void Channel::broadcast(const std::string& message, Client* exclude) {
+	if (!_server)
+		return;
 	for (std::vector<Client*>::iterator it = _members.begin(); it != _members.end(); ++it) {
-		if (*it != exclude)
-			(*it)->appendSendBuffer(message);
+		Client* target = *it;
+		if (target == exclude)
+			continue;
+		_server->sendToClient(target, message);
 	}
 }
 
