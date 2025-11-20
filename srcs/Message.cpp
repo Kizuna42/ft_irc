@@ -50,6 +50,10 @@ bool Message::parse(const std::string& raw) {
 		line = line.substr(pos + 1);
 	}
 
+	// Skip spaces
+	while (!line.empty() && line[0] == ' ')
+		line.erase(0, 1);
+
 	// Parse command
 	pos = line.find(' ');
 	if (pos == std::string::npos) {
@@ -58,6 +62,10 @@ bool Message::parse(const std::string& raw) {
 	}
 	_command = line.substr(0, pos);
 	line = line.substr(pos + 1);
+
+	// Skip spaces
+	while (!line.empty() && line[0] == ' ')
+		line.erase(0, 1);
 
 	// Parse parameters and trailing
 	while (!line.empty()) {
@@ -72,6 +80,10 @@ bool Message::parse(const std::string& raw) {
 		}
 		_params.push_back(line.substr(0, pos));
 		line = line.substr(pos + 1);
+		
+		// Skip multiple spaces
+		while (!line.empty() && line[0] == ' ')
+			line.erase(0, 1);
 	}
 
 	return true;
@@ -122,4 +134,3 @@ std::string createReply(int code, const std::string& client, const std::string& 
 	oss << " " << client << " " << target << " " << msg << "\r\n";
 	return oss.str();
 }
-

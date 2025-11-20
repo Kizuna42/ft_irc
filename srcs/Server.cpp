@@ -383,4 +383,3 @@ void Server::processClientMessage(Client* client, const std::string& message) {
 	if (!msg.getCommand().empty())
 		_commandHandler->execute(client, msg);
 }
-

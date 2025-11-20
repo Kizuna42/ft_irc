@@ -38,6 +38,7 @@ int main(int argc, char* argv[]) {
 	signal(SIGINT, signalHandler);
 	signal(SIGTERM, signalHandler);
 	signal(SIGQUIT, signalHandler);
+	signal(SIGPIPE, SIG_IGN);
 
 	try {
 		Server server(port, password);

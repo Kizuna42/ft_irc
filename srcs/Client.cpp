@@ -98,16 +98,21 @@ void Client::clearSendBuffer(size_t len) {
 }
 
 bool Client::hasCompleteMessage() const {
-	return _recvBuffer.find("\r\n") != std::string::npos;
+	return _recvBuffer.find("\n") != std::string::npos;
 }
 
 std::string Client::extractMessage() {
-	size_t pos = _recvBuffer.find("\r\n");
+	size_t pos = _recvBuffer.find("\n");
 	if (pos == std::string::npos)
 		return "";
 
-	std::string message = _recvBuffer.substr(0, pos);
-	_recvBuffer.erase(0, pos + 2);
+	std::string message;
+	if (pos > 0 && _recvBuffer[pos - 1] == '\r')
+		message = _recvBuffer.substr(0, pos - 1);
+	else
+		message = _recvBuffer.substr(0, pos);
+
+	_recvBuffer.erase(0, pos + 1);
 	return message;
 }
 
@@ -121,4 +126,3 @@ std::string Client::getPrefix() const {
 		oss << "@" << _hostname;
 	return oss.str();
 }
-

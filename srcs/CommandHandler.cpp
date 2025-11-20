@@ -79,7 +79,7 @@ void CommandHandler::handleQuit(Client* client, const Message& msg) {
 
 // Helper functions
 bool CommandHandler::isValidNickname(const std::string& nickname) const {
-	if (nickname.empty() || nickname.length() > 9)
+	if (nickname.empty() || nickname.length() > 30) // Increased from 9 to 30
 		return false;
 
 	if (!std::isalpha(nickname[0]) && nickname[0] != '_')
