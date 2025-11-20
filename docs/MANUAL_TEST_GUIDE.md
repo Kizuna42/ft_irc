@@ -95,7 +95,7 @@ nc localhost 6667
 ```
 
 **入力手順:**
-1. `PASS pass` と入力し、**Enterを押さずに** `Ctrl+D` を2回押す（送信させる）。
+1. `PASS pass` と入力し、**Enterを押さずに** `Ctrl+D` を押す（送信させる）。
 2. `word` と入力し、**Enter** を押す。
 
 または `nc -C` を使わない場合で再現:
