@@ -14,6 +14,20 @@
 
 ## システムコールエラーの処理
 
+### SIGPIPE対策
+
+サーバーが切断されたクライアントソケットに書き込もうとすると、OSは`SIGPIPE`シグナルを送信し、デフォルトではプロセスが終了します。これを防ぐため、起動時に`SIGPIPE`を無視するように設定します。
+
+```cpp
+// main.cpp
+#include <signal.h>
+
+int main(int argc, char** argv) {
+    signal(SIGPIPE, SIG_IGN);
+    // ...
+}
+```
+
 ### socket()
 
 ```cpp

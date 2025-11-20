@@ -920,61 +920,28 @@ gdb ./ircserv
 
 ## 自動テストスイートとValgrindシナリオ
 
-### Python製自動テストスイート (`tests/irc_basic_suite.py`)
+### 自動テストスクリプト (`tests/reproduce_evaluation.py`)
 
-このリポジトリには、複数クライアント・モード・異常系をまとめて検証するための**自動テストスクリプト**が含まれています。
+このリポジトリには、評価基準を満たすための詳細な自動テストスクリプトが含まれています。
 
-- **場所**: `tests/irc_basic_suite.py`
+- **場所**: `tests/reproduce_evaluation.py`
 - **前提**: `./ircserv <port> <password>` が起動済み
-- **デフォルト設定**:
-  - `IRC_HOST=127.0.0.1`
-  - `IRC_PORT=6667`
-  - `IRC_PASSWORD=password`
+- **機能**:
+  - 基本接続と認証
+  - チャンネル操作（JOIN, PART, TOPIC）
+  - メッセージング（PRIVMSG）
+  - オペレーター権限（KICK, INVITE, MODE）
+  - **部分受信処理（Partial Send）**
+  - **負荷耐性（Flood）**
 
 #### 実行例
 
 ```bash
 ./ircserv 6667 password &
-python3 tests/irc_basic_suite.py
+python3 tests/reproduce_evaluation.py
 ```
 
-#### カバーしている主なテスト
-
-- **認証まわり**
-  - 正常な `PASS/NICK/USER` フロー（`001` Welcome）
-  - 間違ったパスワード（`464 Password incorrect`）
-  - PASS なしでの JOIN 試行（`451 You have not registered`）
-  - ニックネーム重複（`433 Nickname is already in use`）
-- **メッセージ**
-  - チャンネル宛て `PRIVMSG` ブロードキャスト
-  - ユーザー宛て `PRIVMSG`（`PRIVMSG nick :...`）
-  - ユーザー宛て `NOTICE`（`NOTICE nick :...`）
-  - パラメータ不足の `NOTICE` に対し**エラーを返さない**ことの確認
-  - 分割された `PRIVMSG`（部分コマンド）を 1 つに復元できること
-- **チャンネル・モード / オペレーター**
-  - 招待制チャンネル `+i` と `INVITE` による参加制御（`473`）
-  - KICK コマンド:
-    - 非オペレーターの KICK 拒否（`482 You're not channel operator`）
-    - オペレーターによる KICK 成功と全員への通知
-  - `MODE +t` による TOPIC 制限と、非オペレーターのエラー（`482`）
-  - キーチャンネル `MODE +k` と誤キー（`475`）／正しいキーでの JOIN
-  - ユーザー数制限 `MODE +l` と満員時の JOIN 拒否（`471`）
-  - オペレーター付与 `MODE +o` により、付与前は KICK 失敗・付与後は KICK 成功となること
-- **切断**
-  - `QUIT` によるチャンネル参加者への通知とクリーンなクライアント削除
-
-テスト結果は次のような形式で表示されます:
-
-```text
-TEST_RESULTS_START
-[OK] basic_auth_success
-  :localhost 001 alice1 :Welcome ...
-...
-SUMMARY 17 / 17
-TEST_RESULTS_END
-```
-
-評価時には、このスクリプトを用いて**仕様達成と回 regressions** を素早く確認できます。
+このスクリプトは、`nc -C`を使用せずにソケットレベルでIRCプロトコルをシミュレートし、断片化されたパケット（Partial Send）や高速な連続送信に対するサーバーの堅牢性を検証します。
 
 ### Valgrind シナリオ (`tests/irc_valgrind_scenario.sh`)
 

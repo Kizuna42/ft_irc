@@ -529,7 +529,7 @@ void Server::handleClientData(int fd) {
     buffer[bytes] = '\0';
     client->appendRecvBuffer(std::string(buffer, bytes));
 
-    // 完全なメッセージ（\r\nまで）を処理
+    // 完全なメッセージ（\n または \r\nまで）を処理
     while (true) {
         Client* current = getClient(fd);
         if (!current || !current->hasCompleteMessage())
@@ -564,7 +564,7 @@ IRCメッセージの最大長は512バイト（\r\n含む）です。
 client->appendRecvBuffer(std::string(buffer, bytes));
 ```
 
-受信したデータをバッファに追加し、`\r\n`が揃うまで蓄積します。
+受信したデータをバッファに追加し、`\n`（または`\r\n`）が揃うまで蓄積します。
 
 ##### 4. 複数メッセージの処理
 

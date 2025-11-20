@@ -123,7 +123,7 @@ public:
 #### `std::string _recvBuffer`
 
 - **役割**: 受信したデータを蓄積するバッファ
-- **用途**: `\r\n`が揃うまでデータを保持
+- **用途**: `\n`（または`\r\n`）が揃うまでデータを保持
 
 **動作例:**
 
@@ -131,8 +131,8 @@ public:
 受信1: "PRIVMSG #ge"
 _recvBuffer = "PRIVMSG #ge"
 
-受信2: "neral :Hello\r\n"
-_recvBuffer = "PRIVMSG #general :Hello\r\n"
+受信2: "neral :Hello\n"
+_recvBuffer = "PRIVMSG #general :Hello\n"
 
 extractMessage()
 → "PRIVMSG #general :Hello"
@@ -282,22 +282,27 @@ if (bytes > 0) {
 
 ```cpp
 bool Client::hasCompleteMessage() const {
-    return _recvBuffer.find("\r\n") != std::string::npos;
+    return _recvBuffer.find("\n") != std::string::npos;
 }
 ```
 
-IRC メッセージは`\r\n`で終了するため、これが含まれているかチェックします。
+IRC メッセージは`\n`（または`\r\n`）で終了するため、これが含まれているかチェックします。
 
 #### extractMessage() - メッセージの抽出
 
 ```cpp
 std::string Client::extractMessage() {
-    size_t pos = _recvBuffer.find("\r\n");
+    size_t pos = _recvBuffer.find("\n");
     if (pos == std::string::npos)
         return "";
 
-    std::string message = _recvBuffer.substr(0, pos);
-    _recvBuffer.erase(0, pos + 2);  // \r\nも削除
+    std::string message;
+    if (pos > 0 && _recvBuffer[pos - 1] == '\r')
+        message = _recvBuffer.substr(0, pos - 1);
+    else
+        message = _recvBuffer.substr(0, pos);
+
+    _recvBuffer.erase(0, pos + 1);
     return message;
 }
 ```
@@ -306,17 +311,17 @@ std::string Client::extractMessage() {
 
 ```cpp
 // 初期状態
-_recvBuffer = "PRIVMSG #general :Hello\r\nNICK alice\r\n"
+_recvBuffer = "PRIVMSG #general :Hello\nNICK alice\r\n"
 
 // 1回目のextractMessage()
-pos = 23  // "PRIVMSG #general :Hello\r\n"の\r\nの位置
+pos = 23  // "PRIVMSG #general :Hello\n"の\nの位置
 message = "PRIVMSG #general :Hello"
 _recvBuffer = "NICK alice\r\n"
 return "PRIVMSG #general :Hello"
 
 // 2回目のextractMessage()
-pos = 10  // "NICK alice\r\n"の\r\nの位置
-message = "NICK alice"
+pos = 11  // "NICK alice\r\n"の\nの位置
+message = "NICK alice" // \rは削除される
 _recvBuffer = ""
 return "NICK alice"
 
@@ -452,13 +457,13 @@ void Server::handleClientData(int fd) {
 // 1回目の受信
 recv() → "PRIVMSG #ge"
 appendRecvBuffer("PRIVMSG #ge")
-hasCompleteMessage() → false  // \r\nがない
+hasCompleteMessage() → false  // \nがない
 // 処理せずに待機
 
 // 2回目の受信
-recv() → "neral :Hello\r\n"
-appendRecvBuffer("neral :Hello\r\n")
-_recvBuffer = "PRIVMSG #general :Hello\r\n"
+recv() → "neral :Hello\n"
+appendRecvBuffer("neral :Hello\n")
+_recvBuffer = "PRIVMSG #general :Hello\n"
 hasCompleteMessage() → true
 extractMessage() → "PRIVMSG #general :Hello"
 // 処理実行

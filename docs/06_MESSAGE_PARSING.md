@@ -184,6 +184,10 @@ bool Message::parse(const std::string& raw) {
         line = line.substr(pos + 1);
     }
 
+    // 空白をスキップ
+    while (!line.empty() && line[0] == ' ')
+        line.erase(0, 1);
+
     // 2. Commandのパース（必須）
     pos = line.find(' ');
     if (pos == std::string::npos) {
@@ -192,6 +196,10 @@ bool Message::parse(const std::string& raw) {
     }
     _command = line.substr(0, pos);
     line = line.substr(pos + 1);
+
+    // 空白をスキップ
+    while (!line.empty() && line[0] == ' ')
+        line.erase(0, 1);
 
     // 3. ParamsとTrailingのパース
     while (!line.empty()) {
@@ -206,6 +214,10 @@ bool Message::parse(const std::string& raw) {
         }
         _params.push_back(line.substr(0, pos));
         line = line.substr(pos + 1);
+
+        // 連続する空白をスキップ
+        while (!line.empty() && line[0] == ' ')
+            line.erase(0, 1);
     }
 
     return true;

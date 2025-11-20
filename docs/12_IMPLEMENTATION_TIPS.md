@@ -421,6 +421,37 @@ for (int i = vec.size() - 1; i >= 0; --i) {
 
 ---
 
+### 落とし穴6: SIGPIPEによるクラッシュ
+
+**問題**: クライアントが切断した後に送信(`send`)しようとすると、OSから`SIGPIPE`シグナルが送信され、デフォルトではプロセスが終了します。
+
+**回避方法**: サーバー起動時に`SIGPIPE`を無視するように設定します。
+
+```cpp
+#include <signal.h>
+
+int main() {
+    signal(SIGPIPE, SIG_IGN);
+    // ...
+}
+```
+
+---
+
+### 落とし穴7: 改行コードの違い
+
+**問題**: `nc` (netcat) や一部のクライアントは、デフォルトで`\n`のみを送信しますが、IRCプロトコルの標準は`\r\n`です。
+
+**回避方法**: `\r\n`と`\n`の両方をデリミタとして受け入れるようにバッファリング処理を実装します。
+
+```cpp
+bool hasCompleteMessage() const {
+    return _recvBuffer.find('\n') != std::string::npos;
+}
+```
+
+---
+
 ## コーディングスタイル
 
 ### 命名規則
