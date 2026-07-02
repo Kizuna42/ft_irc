@@ -1,0 +1,130 @@
+---
+globs: *.cpp,*.hpp,*.h,*.tpp,*.ipp
+description: C++ファイルのコーディング規約
+---
+
+# C++ファイルのコーディング規約
+
+## ヘッダーガード
+
+```cpp
+#ifndef CLASSNAME_HPP
+# define CLASSNAME_HPP
+
+// content
+
+#endif
+```
+
+## インクルード順序
+
+1. 対応するヘッダーファイル（.cpp の場合）
+2. C++標準ライブラリ
+3. システムヘッダー
+4. プロジェクトのヘッダー
+
+例：
+
+```cpp
+#include "Server.hpp"
+
+#include <iostream>
+#include <string>
+#include <vector>
+#include <map>
+
+#include <sys/socket.h>
+#include <poll.h>
+
+#include "Client.hpp"
+#include "Channel.hpp"
+```
+
+## クラス設計
+
+### Orthodox Canonical Form（必要に応じて）
+
+```cpp
+class MyClass {
+public:
+    MyClass();                              // デフォルトコンストラクタ
+    MyClass(const MyClass& other);          // コピーコンストラクタ
+    MyClass& operator=(const MyClass& rhs); // 代入演算子
+    ~MyClass();                             // デストラクタ
+};
+```
+
+### const correctness
+
+- メンバー関数で状態を変更しない場合は`const`を付ける
+- 参照渡しの引数は可能な限り`const`参照にする
+
+```cpp
+std::string getNickname() const;
+void processMessage(const std::string& msg);
+```
+
+## エラーハンドリング
+
+### システムコール
+
+```cpp
+int fd = socket(AF_INET, SOCK_STREAM, 0);
+if (fd == -1) {
+    std::cerr << "Error: socket creation failed" << std::endl;
+    // 適切な処理
+}
+```
+
+### メモリ不足
+
+```cpp
+try {
+    std::vector<Client> clients;
+    // ...
+} catch (const std::bad_alloc& e) {
+    std::cerr << "Error: memory allocation failed" << std::endl;
+    // クラッシュせずに適切に処理
+}
+```
+
+## 命名規則
+
+### クラス名
+
+- PascalCase: `Server`, `Client`, `CommandHandler`
+
+### メンバー変数
+
+- プライベート変数は`_`プレフィックス: `_fd`, `_nickname`
+- または明確な命名: `m_fd`, `m_nickname`
+
+### 関数名
+
+- camelCase: `handleCommand()`, `sendMessage()`
+
+### 定数
+
+- UPPER_CASE: `MAX_CLIENTS`, `BUFFER_SIZE`
+
+## コメント
+
+### ヘッダーファイル
+
+- 公開 API には機能説明を記述
+- パラメータと戻り値を明記
+
+```cpp
+/**
+ * @brief クライアントにメッセージを送信
+ * @param client 送信先クライアント
+ * @param message 送信するメッセージ
+ * @return 成功時true、失敗時false
+ */
+bool sendMessage(Client& client, const std::string& message);
+```
+
+### 実装ファイル
+
+- 複雑なロジックには説明コメントを追加
+- 明白なコードにはコメント不要

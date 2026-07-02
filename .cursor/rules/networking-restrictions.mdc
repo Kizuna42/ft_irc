@@ -1,0 +1,60 @@
+---
+alwaysApply: true
+description: poll()とfcntl()の使用制限
+---
+
+# ネットワーキング制限事項
+
+## poll()の使用制限（重要）
+
+### 絶対遵守事項
+
+- **poll()は 1 つのみ使用**すること（評価で厳密にチェック）
+- すべての`accept()`, `read()`, `recv()`, `write()`, `send()`の前に`poll()`を呼ぶこと
+- `errno == EAGAIN`での再試行ループは**禁止**
+
+### 正しい実装パターン
+
+```cpp
+// 正しい例
+poll(fds, nfds, timeout);
+if (fds[i].revents & POLLIN) {
+    recv(fd, buffer, size, 0);
+}
+
+// 間違った例（禁止）
+while (recv(fd, buffer, size, 0) == -1 && errno == EAGAIN) {
+    // 再試行 - これは禁止
+}
+```
+
+## fcntl()の使用制限
+
+### 許可される唯一の使用方法
+
+```cpp
+fcntl(fd, F_SETFL, O_NONBLOCK);
+```
+
+### 禁止事項
+
+- 上記以外の fcntl()の使用は**すべて禁止**
+- 他のフラグ（O_APPEND, F_GETFL, etc.）の使用は不可
+
+## 非ブロッキング I/O
+
+### 必須実装
+
+- すべてのファイルディスクリプタを非ブロッキングモードに設定
+- 部分送信・部分受信の適切な処理
+- 送信/受信バッファの管理
+
+### Linux 環境での評価
+
+- 動作確認とテストは Linux 環境を想定
+- macOS 特有の動作に依存しないこと
+
+## フォーク禁止
+
+- `fork()`の使用は禁止
+- すべての I/O 操作は非ブロッキングで行うこと

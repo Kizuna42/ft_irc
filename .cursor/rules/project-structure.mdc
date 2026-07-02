@@ -1,0 +1,84 @@
+---
+alwaysApply: true
+description: プロジェクト構造とファイル配置
+---
+
+# プロジェクト構造
+
+## ディレクトリ構成
+
+```
+ft_irc/
+├── Makefile                    # ビルド設定
+├── includes/                   # ヘッダーファイル
+│   ├── Server.hpp             # メインサーバークラス
+│   ├── Client.hpp             # クライアント管理
+│   ├── Channel.hpp            # チャンネル管理
+│   ├── CommandHandler.hpp     # コマンド処理
+│   └── Message.hpp            # IRCメッセージパース
+├── srcs/                       # ソースファイル
+│   ├── main.cpp               # エントリーポイント
+│   ├── Server.cpp
+│   ├── Client.cpp
+│   ├── Channel.cpp
+│   ├── CommandHandler.cpp
+│   ├── Message.cpp
+│   └── commands/              # コマンド実装
+│       ├── auth.cpp           # PASS, NICK, USER
+│       ├── channel.cpp        # JOIN, PART
+│       ├── message.cpp        # PRIVMSG, NOTICE
+│       └── operator.cpp       # KICK, INVITE, TOPIC, MODE
+└── README.md                   # プロジェクト説明
+```
+
+## Makefile 要件
+
+### 必須ルール
+
+- `$(NAME)` - 実行ファイル`ircserv`を生成
+- `all` - デフォルトターゲット
+- `clean` - オブジェクトファイル削除
+- `fclean` - すべての生成ファイル削除
+- `re` - 再ビルド
+
+### コンパイル設定
+
+```makefile
+CXX = c++
+CXXFLAGS = -Wall -Wextra -Werror -std=c++98
+```
+
+## 主要クラスの役割
+
+### Server
+
+- poll()によるイベント監視
+- クライアント接続の管理
+- チャンネルの管理
+- コマンドディスパッチ
+
+### Client
+
+- ファイルディスクリプタ管理
+- 認証状態の保持
+- 受信/送信バッファ
+- ニックネーム、ユーザー名の管理
+
+### Channel
+
+- メンバーリスト管理
+- オペレーターリスト管理
+- チャンネルモード（i, t, k, o, l）
+- トピック管理
+
+### Message
+
+- IRC プロトコルのパース
+- メッセージ生成
+- 数値応答の生成
+
+### CommandHandler
+
+- コマンドの解析と実行
+- 権限チェック
+- エラーハンドリング

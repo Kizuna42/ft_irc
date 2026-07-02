@@ -1,0 +1,98 @@
+---
+alwaysApply: true
+description: IRC プロトコルと実装要件
+---
+
+# IRC プロトコル実装要件
+
+## 必須実装コマンド
+
+### 認証コマンド
+
+- `PASS <password>` - サーバーパスワード認証
+- `NICK <nickname>` - ニックネーム設定（重複チェック必須）
+- `USER <username> <hostname> <servername> <realname>` - ユーザー情報設定
+
+### チャンネルコマンド
+
+- `JOIN <channel>` - チャンネル参加（最初のユーザーはオペレーター）
+- `PART <channel> [reason]` - チャンネル退出
+
+### メッセージングコマンド
+
+- `PRIVMSG <target> <message>` - プライベートメッセージ
+- `NOTICE <target> <message>` - 通知（エラー応答なし）
+
+### オペレーターコマンド（権限チェック必須）
+
+- `KICK <channel> <user> [reason]` - ユーザー追放
+- `INVITE <nickname> <channel>` - ユーザー招待
+- `TOPIC <channel> [topic]` - トピック表示/変更
+- `MODE <channel> <flags> [params]` - チャンネルモード変更
+
+## チャンネルモード
+
+- `i` - Invite-only（招待制）
+- `t` - Topic（オペレーターのみトピック変更可）
+- `k <key>` - Key（チャンネルパスワード）
+- `o <nick>` - Operator（オペレーター権限付与/剥奪）
+- `l <limit>` - Limit（ユーザー数制限）
+
+## 必須数値応答
+
+### 成功応答
+
+- `001 RPL_WELCOME` - 接続成功
+- `331 RPL_NOTOPIC` - トピック未設定
+- `332 RPL_TOPIC` - トピック表示
+- `353 RPL_NAMREPLY` - チャンネルメンバーリスト
+- `366 RPL_ENDOFNAMES` - メンバーリスト終了
+
+### エラー応答
+
+- `401 ERR_NOSUCHNICK` - ユーザーが存在しない
+- `403 ERR_NOSUCHCHANNEL` - チャンネルが存在しない
+- `442 ERR_NOTONCHANNEL` - チャンネルに参加していない
+- `461 ERR_NEEDMOREPARAMS` - パラメータ不足
+- `462 ERR_ALREADYREGISTRED` - すでに認証済み
+- `464 ERR_PASSWDMISMATCH` - パスワード不一致
+- `471 ERR_CHANNELISFULL` - チャンネルが満員
+- `473 ERR_INVITEONLYCHAN` - 招待制チャンネル
+- `475 ERR_BADCHANNELKEY` - チャンネルキーが間違っている
+- `482 ERR_CHANOPRIVSNEEDED` - オペレーター権限が必要
+
+## プロトコルの詳細
+
+### メッセージフォーマット
+
+```
+[:<prefix>] <command> <params> :<trailing>
+```
+
+### メッセージ区切り
+
+- 各メッセージは`\r\n`で終了
+- 部分受信への対応が必須（バッファリング）
+
+### 認証フロー
+
+1. クライアント接続
+2. `PASS`コマンドでパスワード送信
+3. `NICK`コマンドでニックネーム設定
+4. `USER`コマンドでユーザー情報設定
+5. 認証完了後、`001 RPL_WELCOME`を送信
+
+## テスト要件
+
+### 参照クライアント
+
+- irssi（推奨）
+- WeeChat, HexChat 等も使用可能
+
+### 必須テストケース
+
+- nc での部分コマンド送信（Ctrl+D で分割）
+- 複数クライアント同時接続
+- クライアント強制終了
+- クライアント一時停止（Ctrl+Z）中のフラッド
+- メモリリークチェック（valgrind）

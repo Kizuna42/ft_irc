@@ -1,0 +1,39 @@
+---
+alwaysApply: true
+description: C++98標準とコーディング規約
+---
+
+# C++98 標準とコーディング規約
+
+このプロジェクトは**C++98 標準**に準拠する必要があります。
+
+## 必須要件
+
+### コンパイラフラグ
+
+- `-Wall -Wextra -Werror -std=c++98`でコンパイル可能であること
+- 警告をすべてエラーとして扱う
+
+### ヘッダーファイル
+
+- C++ヘッダーを優先：`<cstring>` over `<string.h>`, `<cstdlib>` over `<stdlib.h>`
+- 使用可能：`<iostream>`, `<string>`, `<vector>`, `<map>`, `<algorithm>`, `<sstream>`, etc.
+- 外部ライブラリと Boost は**禁止**
+
+### 禁止事項
+
+- C++11 以降の機能（auto, nullptr, lambda, range-based for, etc.）
+- Boost 等の外部ライブラリ
+
+### 推奨事項
+
+- STL コンテナの活用（`std::vector`, `std::map`, `std::string`）
+- RAII（Resource Acquisition Is Initialization）パターン
+- const correctness
+- 適切な例外処理（ただしメモリ不足時のクラッシュを防ぐ）
+
+## エラーハンドリング
+
+- プログラムはいかなる状況でもクラッシュしてはならない
+- メモリ不足時も適切に処理すること
+- 予期せぬ終了は禁止
