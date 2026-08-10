@@ -47,12 +47,12 @@ This project implements an IRC server that speaks a subset of the IRC protocol (
 
 `Server::start()` runs a single loop around one `poll()` call covering the listening socket and every connected client fd (`std::vector<struct pollfd>`). Each iteration:
 
-- `POLLIN` on the listening fd triggers `handleNewConnection()`, which `accept()`s the connection, sets it non-blocking with `fcntl(fd, F_SETFL, O_NONBLOCK)`, wraps it in a `Client`, and registers it in `_pollFds` with `POLLIN | POLLOUT`.
+- `POLLIN` on the listening fd triggers `handleNewConnection()`, which `accept()`s the connection, sets it non-blocking with `fcntl(fd, F_SETFL, O_NONBLOCK)`, wraps it in a `Client`, and registers it in `_pollFds` with `POLLIN | POLLOUT`. `POLLOUT` remains registered even when the send buffer is empty; in that case `handleClientSend()` returns immediately.
 - `POLLIN` on a client fd triggers `handleClientData()`, which reads into a fixed buffer with `recv()` and appends the data to the client's receive buffer.
 - `POLLOUT` on a client fd triggers `handleClientSend()`, which flushes as much of the client's send buffer as `send()` accepts.
 - `POLLERR`/`POLLHUP`/`POLLNVAL` closes and removes the connection.
 
-All sockets are non-blocking, so `recv()`/`send()` errors of `EAGAIN`/`EWOULDBLOCK`/`EINTR` are treated as "try again later" rather than fatal errors. There is no per-client thread or blocking call anywhere in the loop.
+All sockets are non-blocking, so `recv()`/`send()` errors of `EAGAIN`/`EWOULDBLOCK` are treated as "try again later" rather than fatal errors. Other send errors, including `EINTR` in the current implementation, close the client connection. There is no per-client thread or blocking call anywhere in the loop.
 
 ### Client state machine and message framing
 
@@ -93,14 +93,17 @@ Compiled with `c++ -Wall -Wextra -Werror -std=c++98`.
 Example:
 
 ```bash
-./ircserv 6667 mypassword
+./ircserv 6667 local-dev-password
 ```
+
+> The password is passed as a command-line argument and can appear in shell history and process
+> listings. Use the example only for local testing, and never reuse a real credential.
 
 ### Testing with `nc`
 
 ```bash
 nc localhost 6667
-PASS mypassword
+PASS local-dev-password
 NICK testnick
 USER testuser 0 * :Test User
 JOIN #test
