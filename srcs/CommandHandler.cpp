@@ -3,7 +3,6 @@
 #include "Client.hpp"
 #include "Channel.hpp"
 #include "Message.hpp"
-#include <algorithm>
 #include <cctype>
 #include <unistd.h>
 
@@ -16,8 +15,9 @@ CommandHandler::~CommandHandler() {
 void CommandHandler::execute(Client* client, const Message& msg) {
 	std::string command = msg.getCommand();
 
-	// Convert command to uppercase
-	std::transform(command.begin(), command.end(), command.begin(), ::toupper);
+	// Convert command to uppercase (cast avoids UB for non-ASCII bytes)
+	for (size_t i = 0; i < command.length(); ++i)
+		command[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(command[i])));
 
 	// Authentication commands (can be used before authentication)
 	if (command == "PASS") {
@@ -82,11 +82,11 @@ bool CommandHandler::isValidNickname(const std::string& nickname) const {
 	if (nickname.empty() || nickname.length() > 30) // Increased from 9 to 30
 		return false;
 
-	if (!std::isalpha(nickname[0]) && nickname[0] != '_')
+	if (!std::isalpha(static_cast<unsigned char>(nickname[0])) && nickname[0] != '_')
 		return false;
 
 	for (size_t i = 1; i < nickname.length(); ++i) {
-		if (!std::isalnum(nickname[i]) && nickname[i] != '_' && nickname[i] != '-')
+		if (!std::isalnum(static_cast<unsigned char>(nickname[i])) && nickname[i] != '_' && nickname[i] != '-')
 			return false;
 	}
 

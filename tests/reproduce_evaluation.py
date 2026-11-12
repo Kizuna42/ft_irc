@@ -5,9 +5,15 @@ import sys
 import os
 
 # Configuration
-HOST = '127.0.0.1'
-PORT = 6667
-PASSWORD = 'password123'
+HOST = os.environ.get('IRC_HOST', '127.0.0.1')
+PORT = int(os.environ.get('IRC_PORT', '6667'))
+PASSWORD = os.environ.get('IRC_PASSWORD', 'password123')
+
+FAILURES = []
+
+def fail(message):
+    print(message)
+    FAILURES.append(message)
 
 class IRCClient:
     def __init__(self, nickname, username="user", password=PASSWORD):
@@ -18,8 +24,10 @@ class IRCClient:
         self.connected = False
         self.buffer = ""
 
-    def connect(self):
+    def connect(self, rcvbuf=None):
         try:
+            if rcvbuf is not None:
+                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, rcvbuf)
             self.sock.connect((HOST, PORT))
             self.connected = True
             return True
@@ -107,16 +115,16 @@ def test_basic_connection():
         if client.register():
             print("✓ Connection and Registration successful")
         else:
-            print("✗ Registration failed")
+            fail("✗ Registration failed")
         client.close()
     else:
-        print("✗ Connection failed")
+        fail("✗ Connection failed")
 
 def test_channel_operations():
     print("\n=== Test 2: Channel Operations (JOIN, TOPIC, PART) ===")
     client = IRCClient("test_chan")
     if not client.connect() or not client.register():
-        print("✗ Setup failed")
+        fail("✗ Setup failed")
         return
 
     # JOIN
@@ -131,7 +139,7 @@ def test_channel_operations():
     if joined:
         print("✓ JOIN #test successful")
     else:
-        print("✗ JOIN #test failed")
+        fail("✗ JOIN #test failed")
 
     # TOPIC
     client.send("TOPIC #test :Hello World")
@@ -145,7 +153,7 @@ def test_channel_operations():
     if topic_set:
         print("✓ TOPIC set successful")
     else:
-        print("✗ TOPIC set failed")
+        fail("✗ TOPIC set failed")
 
     # PART
     client.send("PART #test")
@@ -159,7 +167,7 @@ def test_channel_operations():
     if parted:
         print("✓ PART #test successful")
     else:
-        print("✗ PART #test failed")
+        fail("✗ PART #test failed")
 
     client.close()
 
@@ -189,7 +197,7 @@ def test_messaging():
     if received_pm:
         print("✓ Private Message successful")
     else:
-        print(f"✗ Private Message failed. Got: {lines}")
+        fail(f"✗ Private Message failed. Got: {lines}")
 
     # Test Channel Message
     receiver.send("JOIN #msgtest")
@@ -211,7 +219,7 @@ def test_messaging():
     if received_cm:
         print("✓ Channel Message successful")
     else:
-        print(f"✗ Channel Message failed. Got: {lines}")
+        fail(f"✗ Channel Message failed. Got: {lines}")
         
     receiver.close()
     sender.close()
@@ -220,7 +228,7 @@ def test_partial_commands():
     print("\n=== Test 4: Partial Commands (Fragmentation) ===")
     client = IRCClient("test_partial")
     if not client.connect():
-        print("✗ Setup failed")
+        fail("✗ Setup failed")
         return
         
     # Send PASS and NICK normally
@@ -248,7 +256,7 @@ def test_partial_commands():
     if registered:
         print("✓ Server handled partial command correctly")
     else:
-        print("✗ Server failed to handle partial command")
+        fail("✗ Server failed to handle partial command")
         
     client.close()
 
@@ -282,7 +290,7 @@ def test_operator_commands():
     if kicked:
         print("✓ KICK successful")
     else:
-        print("✗ KICK failed")
+        fail("✗ KICK failed")
         
     # Invite back
     print("Testing INVITE...")
@@ -298,7 +306,7 @@ def test_operator_commands():
     if invited:
         print("✓ INVITE successful")
     else:
-        print("✗ INVITE failed")
+        fail("✗ INVITE failed")
 
     # Test MODE
     print("Testing MODE +k...")
@@ -314,7 +322,7 @@ def test_operator_commands():
     if mode_set:
         print("✓ MODE +k successful")
     else:
-        print("✗ MODE +k failed")
+        fail("✗ MODE +k failed")
 
     op.close()
     user.close()
@@ -323,6 +331,7 @@ def test_flood_stability():
     print("\n=== Test 6: Flood Stability ===")
     client = IRCClient("flooder")
     if not client.connect() or not client.register():
+        fail("✗ Setup failed")
         return
 
     print("Sending 1000 PINGs...")
@@ -350,8 +359,82 @@ def test_flood_stability():
     except:
         pass
         
-    print("✗ Server did not respond after flood")
+    fail("✗ Server did not respond after flood")
     client.close()
+
+def test_slow_reader_flood():
+    print("\n=== Test 7: Flooding a channel with a member that never reads ===")
+    # A member that stops reading eventually overflows its server-side send
+    # buffer and is disconnected. This happens in the middle of a channel
+    # broadcast, which must not corrupt server state.
+    sleeper = IRCClient("sleeper")
+    flooder = IRCClient("chanflood")
+    watcher = IRCClient("watcher")
+    if not sleeper.connect(rcvbuf=4096) or not sleeper.register():
+        fail("✗ Setup failed (sleeper)")
+        return
+    if not flooder.connect() or not flooder.register():
+        fail("✗ Setup failed (flooder)")
+        return
+    if not watcher.connect() or not watcher.register():
+        fail("✗ Setup failed (watcher)")
+        return
+
+    # The sleeper joins last so that it is the last member iterated over
+    # during a broadcast.
+    for c in (flooder, watcher, sleeper):
+        c.send("JOIN #flood")
+        time.sleep(0.2)
+
+    payload = "x" * 400
+    stop = threading.Event()
+
+    def drain():
+        # Keep the watcher reading so that only the sleeper overflows.
+        while not stop.is_set() and watcher.connected:
+            watcher.receive(timeout=0.2)
+
+    t = threading.Thread(target=drain)
+    t.start()
+    try:
+        # Enough data to fill the kernel socket buffers on loopback and then
+        # the server's own per-client send buffer.
+        for batch in range(400):
+            lines = "".join(f"PRIVMSG #flood :{batch}-{i} {payload}\r\n" for i in range(50))
+            flooder.sock.settimeout(10)
+            flooder.sock.sendall(lines.encode("utf-8"))
+            flooder.receive(timeout=0.001)
+    finally:
+        time.sleep(1)
+        stop.set()
+        t.join()
+
+    watcher.buffer = ""
+    flooder.send("PRIVMSG #flood :still alive")
+    alive = False
+    start = time.time()
+    while time.time() - start < 5 and not alive:
+        for line in watcher.receive(timeout=0.5) or []:
+            if "still alive" in line:
+                alive = True
+
+    if alive:
+        print("✓ Server survived broadcast to a non-reading member")
+    else:
+        fail("✗ Server did not relay messages after slow-reader flood")
+
+    newcomer = IRCClient("newcomer")
+    if newcomer.connect() and newcomer.register():
+        print("✓ Server still accepts new clients")
+    else:
+        fail("✗ Server stopped accepting new clients")
+    newcomer.close()
+
+    for c in (sleeper, flooder, watcher):
+        try:
+            c.close()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     try:
@@ -361,8 +444,14 @@ if __name__ == "__main__":
         test_partial_commands()
         test_operator_commands()
         test_flood_stability()
-        print("\nAll tests completed.")
+        test_slow_reader_flood()
     except KeyboardInterrupt:
         print("\nTests interrupted.")
+        sys.exit(130)
     except Exception as e:
-        print(f"\nTests failed with error: {e}")
+        fail(f"\nTests failed with error: {e}")
+
+    if FAILURES:
+        print(f"\n{len(FAILURES)} check(s) failed.")
+        sys.exit(1)
+    print("\nAll tests passed.")

@@ -47,7 +47,7 @@ This project implements an IRC server that speaks a subset of the IRC protocol (
 
 `Server::start()` runs a single loop around one `poll()` call covering the listening socket and every connected client fd (`std::vector<struct pollfd>`). Each iteration:
 
-- `POLLIN` on the listening fd triggers `handleNewConnection()`, which `accept()`s the connection, sets it non-blocking with `fcntl(fd, F_SETFL, O_NONBLOCK)`, wraps it in a `Client`, and registers it in `_pollFds` with `POLLIN | POLLOUT`. `POLLOUT` remains registered even when the send buffer is empty; in that case `handleClientSend()` returns immediately.
+- `POLLIN` on the listening fd triggers `handleNewConnection()`, which `accept()`s the connection, sets it non-blocking with `fcntl(fd, F_SETFL, O_NONBLOCK)`, wraps it in a `Client`, and registers it in `_pollFds` with `POLLIN`. Before every `poll()` call, `updatePollEvents()` adds `POLLOUT` only for clients whose send buffer is non-empty, so an idle server does not busy-loop on always-writable sockets.
 - `POLLIN` on a client fd triggers `handleClientData()`, which reads into a fixed buffer with `recv()` and appends the data to the client's receive buffer.
 - `POLLOUT` on a client fd triggers `handleClientSend()`, which flushes as much of the client's send buffer as `send()` accepts.
 - `POLLERR`/`POLLHUP`/`POLLNVAL` closes and removes the connection.
@@ -58,7 +58,7 @@ All sockets are non-blocking, so `recv()`/`send()` errors of `EAGAIN`/`EWOULDBLO
 
 `Client` tracks registration progress with three flags (`_hasPassword`, `_hasNick`, `_hasUser`) plus a final `_isAuthenticated` flag. Each of `PASS`, `NICK`, and `USER` can arrive in any order; after each one, the handler checks whether all three prerequisites are met and, if so, marks the client authenticated and sends the welcome reply. Any command other than `PASS`/`NICK`/`USER`/`PING`/`QUIT` is rejected with `ERR_NOTREGISTERED` until authentication completes.
 
-Because TCP is a byte stream, a single `recv()` call may deliver a partial line or several lines at once. Incoming bytes are appended to a per-client receive buffer; `Client::hasCompleteMessage()`/`extractMessage()` scan for `\n` (stripping a preceding `\r`) and only hand a complete line to the command dispatcher, leaving any remainder buffered for the next `recv()`. Outgoing data goes through the same pattern in reverse: `Server::sendToClient()` appends to a per-client send buffer (capped at 16 KiB — the connection is dropped if this limit is exceeded) and `handleClientSend()` drains it on `POLLOUT`, so writes never block the event loop even if a client reads slowly.
+Because TCP is a byte stream, a single `recv()` call may deliver a partial line or several lines at once. Incoming bytes are appended to a per-client receive buffer; `Client::hasCompleteMessage()`/`extractMessage()` scan for `\n` (stripping a preceding `\r`) and only hand a complete line to the command dispatcher, leaving any remainder buffered for the next `recv()`. An incomplete line is limited to 8 KiB; a client that exceeds it without sending a line break is disconnected. Outgoing data goes through the same pattern in reverse: `Server::sendToClient()` appends to a per-client send buffer (capped at 16 KiB — if a slow reader exceeds this limit, its connection is scheduled for closing and dropped once the current `poll()` iteration has been processed, so that a broadcast in progress never sees a member disappear underneath it) and `handleClientSend()` drains it on `POLLOUT`, so writes never block the event loop even if a client reads slowly.
 
 ### Message parsing and command dispatch
 
@@ -96,8 +96,22 @@ Example:
 ./ircserv 6667 local-dev-password
 ```
 
+`SIGINT`/`SIGTERM`/`SIGQUIT` only set a flag from the signal handler; the event loop then exits and the server releases every connection and channel through its destructor.
+
 > The password is passed as a command-line argument and can appear in shell history and process
 > listings. Use the example only for local testing, and never reuse a real credential.
+
+### Automated tests
+
+`tests/reproduce_evaluation.py` drives a running server over TCP (authentication, channels, messaging, partial commands, operator commands, floods and a slow reader). It exits with a non-zero status when any check fails. Host, port and password can be set with `IRC_HOST`, `IRC_PORT` and `IRC_PASSWORD`.
+
+```bash
+make
+./ircserv 6667 password123 &
+python3 tests/reproduce_evaluation.py
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) builds the server with `g++` and `clang++` and runs these tests, plus a run under AddressSanitizer/UndefinedBehaviorSanitizer.
 
 ### Testing with `nc`
 

@@ -153,10 +153,14 @@ _pollFds.push_back(pfd);
 
 // クライアントソケットを追加
 pfd.fd = clientFd;
-pfd.events = POLLIN | POLLOUT;  // 読み書き両方を監視
+pfd.events = POLLIN;  // POLLOUT は送信バッファにデータがあるときだけ追加する
 pfd.revents = 0;
 _pollFds.push_back(pfd);
 ```
+
+> 送信バッファが空のソケットに `POLLOUT` を登録したままにすると、ソケットは常に書き込み可能なため
+> `poll()` が即座に返り続け、CPU を 100% 消費します。`Server::updatePollEvents()` が毎回 `poll()`
+> の直前に、送信待ちデータのあるクライアントにだけ `POLLOUT` を設定します。
 
 ---
 
@@ -471,7 +475,7 @@ void Server::handleNewConnection() {
         // poll配列に追加
         struct pollfd pfd;
         pfd.fd = clientFd;
-        pfd.events = POLLIN | POLLOUT;  // 読み書き両方を監視
+        pfd.events = POLLIN;  // POLLOUT は updatePollEvents() で必要時のみ追加
         pfd.revents = 0;
         _pollFds.push_back(pfd);
 
