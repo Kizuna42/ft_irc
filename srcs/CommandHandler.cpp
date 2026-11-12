@@ -66,14 +66,13 @@ void CommandHandler::handlePing(Client* client, const Message& msg) {
 	std::string response = ":localhost PONG localhost";
 	if (!msg.getParams().empty())
 		response += " :" + msg.getParams()[0];
-	else if (!msg.getTrailing().empty())
-		response += " :" + msg.getTrailing();
 	response += "\r\n";
 	_server->sendToClient(client, response);
 }
 
 void CommandHandler::handleQuit(Client* client, const Message& msg) {
-	std::string reason = msg.getTrailing().empty() ? "Client quit" : msg.getTrailing();
+	const std::vector<std::string>& params = msg.getParams();
+	std::string reason = (params.empty() || params[0].empty()) ? "Client quit" : params[0];
 	_server->disconnectClient(client, reason);
 }
 

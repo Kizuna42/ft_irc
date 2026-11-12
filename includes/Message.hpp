@@ -10,6 +10,7 @@ private:
 	std::string					_command;
 	std::vector<std::string>	_params;
 	std::string					_trailing;
+	bool						_hasTrailing;
 
 public:
 	// Constructor & Destructor
@@ -22,6 +23,7 @@ public:
 	const std::string&				getCommand() const;
 	const std::vector<std::string>&	getParams() const;
 	const std::string&				getTrailing() const;
+	bool							hasTrailing() const;
 
 	// Parse
 	bool							parse(const std::string& raw);
@@ -66,6 +68,8 @@ namespace ERR {
 
 // Helper functions for creating IRC messages
 std::string createReply(int code, const std::string& client, const std::string& msg);
+// RFC 1459 case mapping (A-Z and []\\~ fold to a-z and {}|^)
+std::string ircToLower(const std::string& str);
 std::string createReply(int code, const std::string& client, const std::string& target, const std::string& msg);
 
 #endif

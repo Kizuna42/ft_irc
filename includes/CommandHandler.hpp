@@ -47,6 +47,7 @@ private:
 	// Helper functions
 	bool isValidNickname(const std::string& nickname) const;
 	bool isValidChannelName(const std::string& name) const;
+	void joinChannel(Client* client, const std::string& channelName, const std::string& key);
 };
 
 #endif

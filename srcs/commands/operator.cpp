@@ -31,7 +31,7 @@ void CommandHandler::handleKick(Client *client, const Message &msg)
 
 	std::string channelName = params[0];
 	std::string targetNick = params[1];
-	std::string reason = msg.getTrailing().empty() ? client->getNickname() : msg.getTrailing();
+	std::string reason = (params.size() < 3 || params[2].empty()) ? client->getNickname() : params[2];
 
 	// Get channel
 	Channel *channel = _server->getChannel(channelName);
@@ -165,7 +165,7 @@ void CommandHandler::handleTopic(Client *client, const Message &msg)
 	}
 
 	// If no topic parameter, return current topic
-	if (params.size() == 1 && msg.getTrailing().empty())
+	if (params.size() == 1)
 	{
 		if (channel->getTopic().empty())
 		{
@@ -186,7 +186,7 @@ void CommandHandler::handleTopic(Client *client, const Message &msg)
 	}
 
 	// Set new topic
-	std::string newTopic = msg.getTrailing();
+	std::string newTopic = params[1];
 	channel->setTopic(newTopic);
 
 	// Broadcast topic change

@@ -6,17 +6,42 @@
 #include <iostream>
 #include <sstream>
 
+namespace {
+std::vector<std::string> splitComma(const std::string& str) {
+	std::vector<std::string> result;
+	std::string::size_type start = 0;
+	while (true) {
+		std::string::size_type pos = str.find(',', start);
+		if (pos == std::string::npos) {
+			result.push_back(str.substr(start));
+			break;
+		}
+		result.push_back(str.substr(start, pos - start));
+		start = pos + 1;
+	}
+	return result;
+}
+}
+
+// JOIN <channel>{,<channel>} [<key>{,<key>}]  (RFC 1459 section 4.2.1)
 void CommandHandler::handleJoin(Client* client, const Message& msg) {
 	// Check parameters
 	const std::vector<std::string>& params = msg.getParams();
-	if (params.empty()) {
+	if (params.empty() || params[0].empty()) {
 		_server->sendToClient(client, createReply(ERR::NEEDMOREPARAMS, client->getNickname(), "JOIN :Not enough parameters"));
 		return;
 	}
 
-	std::string channelName = params[0];
-	std::string key = params.size() > 1 ? params[1] : "";
+	std::vector<std::string> channels = splitComma(params[0]);
+	std::vector<std::string> keys;
+	if (params.size() > 1)
+		keys = splitComma(params[1]);
 
+	for (size_t i = 0; i < channels.size(); ++i)
+		joinChannel(client, channels[i], i < keys.size() ? keys[i] : "");
+}
+
+void CommandHandler::joinChannel(Client* client, const std::string& channelName, const std::string& key) {
 	// Validate channel name
 	if (!isValidChannelName(channelName)) {
 		_server->sendToClient(client, createReply(ERR::NOSUCHCHANNEL, client->getNickname(), channelName + " :No such channel"));
@@ -98,7 +123,7 @@ void CommandHandler::handlePart(Client* client, const Message& msg) {
 	}
 
 	std::string channelName = params[0];
-	std::string reason = msg.getTrailing().empty() ? client->getNickname() : msg.getTrailing();
+	std::string reason = (params.size() < 2 || params[1].empty()) ? client->getNickname() : params[1];
 
 	// Get channel
 	Channel* channel = _server->getChannel(channelName);

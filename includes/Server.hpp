@@ -51,6 +51,7 @@ public:
     Channel* getChannel(const std::string& name);
     Channel* createChannel(const std::string& name);
     void removeChannel(const std::string& name);
+    void renameInvites(const std::string& oldNick, const std::string& newNick);
     void broadcastToClientChannels(Client* client, const std::string& message, Client* exclude = NULL);
 
     // Misc
