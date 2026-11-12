@@ -2,6 +2,7 @@ NAME = ircserv
 
 CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -I./includes
+DEPFLAGS = -MMD -MP
 
 SRCS_DIR = srcs
 OBJS_DIR = objs
@@ -18,6 +19,7 @@ SRCS = $(SRCS_DIR)/main.cpp \
        $(SRCS_DIR)/commands/operator.cpp
 
 OBJS = $(SRCS:$(SRCS_DIR)/%.cpp=$(OBJS_DIR)/%.o)
+DEPS = $(OBJS:.o=.d)
 
 all: $(NAME)
 
@@ -27,7 +29,7 @@ $(NAME): $(OBJS)
 
 $(OBJS_DIR)/%.o: $(SRCS_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 clean:
 	@rm -rf $(OBJS_DIR)
@@ -40,3 +42,5 @@ fclean: clean
 re: fclean all
 
 .PHONY: all clean fclean re
+
+-include $(DEPS)
