@@ -140,12 +140,28 @@ Client* Server::getClient(int fd) {
 	return NULL;
 }
 
+// Nicknames are compared case-insensitively (RFC 1459 section 2.2).
 Client* Server::getClientByNickname(const std::string& nickname) {
+	if (nickname.empty())
+		return NULL;
+	const std::string folded = ircToLower(nickname);
 	for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-		if (it->second->getNickname() == nickname)
+		if (ircToLower(it->second->getNickname()) == folded)
 			return it->second;
 	}
 	return NULL;
+}
+
+// Pending invitations are keyed by nickname, so carry them over on NICK.
+void Server::renameInvites(const std::string& oldNick, const std::string& newNick) {
+	if (oldNick.empty())
+		return;
+	for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
+		if (it->second->isInvited(oldNick)) {
+			it->second->removeInvite(oldNick);
+			it->second->addInvite(newNick);
+		}
+	}
 }
 
 void Server::removeClient(int fd, const std::string& reason) {
@@ -345,10 +361,10 @@ void Server::handleClientData(int fd) {
 	char buffer[512];
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
 
+	// poll() reported this fd readable, so -1 is treated as a failed
+	// connection. errno is intentionally not inspected after recv().
 	if (bytes < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
-			return;
-		std::cerr << "Error: recv failed: " << strerror(errno) << std::endl;
+		std::cerr << "Error: recv failed (fd: " << fd << ")" << std::endl;
 		closeConnection(fd, "Read error");
 		return;
 	}
@@ -389,13 +405,11 @@ void Server::handleClientSend(int fd) {
 	const std::string& buffer = client->getSendBuffer();
 	ssize_t bytes = send(fd, buffer.c_str(), buffer.size(), 0);
 
-	if (bytes < 0) {
-		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			std::cerr << "Error: send failed: " << strerror(errno) << std::endl;
-			closeConnection(fd, "Send error");
-		}
+	// errno is intentionally not inspected after send(): on -1 the data stays
+	// buffered and is retried on the next POLLOUT. A broken socket is reported
+	// by poll() as POLLERR/POLLHUP and closed by the event loop.
+	if (bytes < 0)
 		return;
-	}
 
 	client->clearSendBuffer(bytes);
 }

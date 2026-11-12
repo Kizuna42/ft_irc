@@ -12,7 +12,7 @@ void CommandHandler::handlePass(Client* client, const Message& msg) {
 
 	// Check parameters
 	const std::vector<std::string>& params = msg.getParams();
-	std::string password = params.empty() ? msg.getTrailing() : params[0];
+	std::string password = params.empty() ? "" : params[0];
 
 	if (password.empty()) {
 		_server->sendToClient(client, createReply(ERR::NEEDMOREPARAMS, "*", "PASS :Not enough parameters"));
@@ -39,7 +39,7 @@ void CommandHandler::handlePass(Client* client, const Message& msg) {
 void CommandHandler::handleNick(Client* client, const Message& msg) {
 	// Check parameters
 	const std::vector<std::string>& params = msg.getParams();
-	if (params.empty()) {
+	if (params.empty() || params[0].empty()) {
 		_server->sendToClient(client, createReply(ERR::NONICKNAMEGIVEN, "*", ":No nickname given"));
 		return;
 	}
@@ -63,6 +63,7 @@ void CommandHandler::handleNick(Client* client, const Message& msg) {
 	std::string oldNick = client->getNickname();
 	std::string oldPrefix = client->getPrefix();
 	client->setNickname(newNick);
+	_server->renameInvites(oldNick, newNick);
 
 	// If already authenticated, notify about nick change
 	if (client->isAuthenticated() && !oldNick.empty()) {
@@ -89,14 +90,14 @@ void CommandHandler::handleUser(Client* client, const Message& msg) {
 
 	// Check parameters: USER <username> <hostname> <servername> <realname>
 	const std::vector<std::string>& params = msg.getParams();
-	if (params.size() < 3 || msg.getTrailing().empty()) {
+	if (params.size() < 4 || params[0].empty() || params[3].empty()) {
 		_server->sendToClient(client, createReply(ERR::NEEDMOREPARAMS, "*", "USER :Not enough parameters"));
 		return;
 	}
 
 	// Set user information
 	client->setUsername(params[0]);
-	client->setRealname(msg.getTrailing());
+	client->setRealname(params[3]);
 
 	// Check if registration is complete
 	if (client->hasPassword() && client->hasNick() && client->hasUser()) {

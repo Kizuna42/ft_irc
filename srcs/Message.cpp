@@ -1,10 +1,10 @@
 #include "Message.hpp"
 #include <sstream>
 
-Message::Message() {
+Message::Message() : _hasTrailing(false) {
 }
 
-Message::Message(const std::string& raw) {
+Message::Message(const std::string& raw) : _hasTrailing(false) {
 	parse(raw);
 }
 
@@ -28,7 +28,15 @@ const std::string& Message::getTrailing() const {
 	return _trailing;
 }
 
+bool Message::hasTrailing() const {
+	return _hasTrailing;
+}
+
 // Parse IRC message format: [:<prefix>] <command> <params> [:<trailing>]
+// The trailing parameter is also appended to _params as the last parameter
+// (RFC 1459/2812: the leading colon is only needed when the final parameter
+// contains spaces or starts with a colon), so commands can read every
+// argument by position whether or not the client used a colon.
 bool Message::parse(const std::string& raw) {
 	if (raw.empty())
 		return false;
@@ -37,6 +45,7 @@ bool Message::parse(const std::string& raw) {
 	_command.clear();
 	_params.clear();
 	_trailing.clear();
+	_hasTrailing = false;
 
 	std::string line = raw;
 	size_t pos = 0;
@@ -71,6 +80,8 @@ bool Message::parse(const std::string& raw) {
 	while (!line.empty()) {
 		if (line[0] == ':') {
 			_trailing = line.substr(1);
+			_hasTrailing = true;
+			_params.push_back(_trailing);
 			break;
 		}
 		pos = line.find(' ');
@@ -98,11 +109,12 @@ std::string Message::toString() const {
 
 	oss << _command;
 
-	for (size_t i = 0; i < _params.size(); ++i)
-		oss << " " << _params[i];
-
-	if (!_trailing.empty())
-		oss << " :" << _trailing;
+	for (size_t i = 0; i < _params.size(); ++i) {
+		if (_hasTrailing && i + 1 == _params.size())
+			oss << " :" << _params[i];
+		else
+			oss << " " << _params[i];
+	}
 
 	oss << "\r\n";
 	return oss.str();
@@ -133,4 +145,22 @@ std::string createReply(int code, const std::string& client, const std::string& 
 		oss << code;
 	oss << " " << client << " " << target << " " << msg << "\r\n";
 	return oss.str();
+}
+
+std::string ircToLower(const std::string& str) {
+	std::string result(str);
+	for (size_t i = 0; i < result.length(); ++i) {
+		char c = result[i];
+		if (c >= 'A' && c <= 'Z')
+			result[i] = static_cast<char>(c - 'A' + 'a');
+		else if (c == '[')
+			result[i] = '{';
+		else if (c == ']')
+			result[i] = '}';
+		else if (c == '\\')
+			result[i] = '|';
+		else if (c == '~')
+			result[i] = '^';
+	}
+	return result;
 }

@@ -12,13 +12,13 @@ void CommandHandler::handlePrivmsg(Client* client, const Message& msg) {
 		return;
 	}
 
-	if (msg.getTrailing().empty()) {
+	if (params.size() < 2 || params[1].empty()) {
 		_server->sendToClient(client, createReply(ERR::NOTEXTTOSEND, client->getNickname(), ":No text to send"));
 		return;
 	}
 
 	std::string target = params[0];
-	std::string text = msg.getTrailing();
+	std::string text = params[1];
 	std::string privmsgMsg = ":" + client->getPrefix() + " PRIVMSG " + target + " :" + text + "\r\n";
 
 	// Check if target is a channel
@@ -52,11 +52,11 @@ void CommandHandler::handlePrivmsg(Client* client, const Message& msg) {
 void CommandHandler::handleNotice(Client* client, const Message& msg) {
 	// NOTICE is like PRIVMSG but doesn't send error replies
 	const std::vector<std::string>& params = msg.getParams();
-	if (params.empty() || msg.getTrailing().empty())
+	if (params.size() < 2 || params[1].empty())
 		return;
 
 	std::string target = params[0];
-	std::string text = msg.getTrailing();
+	std::string text = params[1];
 	std::string noticeMsg = ":" + client->getPrefix() + " NOTICE " + target + " :" + text + "\r\n";
 
 	// Check if target is a channel

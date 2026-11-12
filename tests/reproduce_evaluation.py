@@ -436,6 +436,150 @@ def test_slow_reader_flood():
         except Exception:
             pass
 
+def wait_for(client, needle, timeout=3):
+    """Read until a line containing `needle` arrives; return it or None."""
+    # Lines received after the match are kept for the next call.
+    pending = getattr(client, "pending", [])
+    client.pending = []
+    deadline = time.time() + timeout
+    while True:
+        while pending:
+            line = pending.pop(0)
+            if needle in line:
+                client.pending = pending
+                return line
+        if time.time() >= deadline:
+            return None
+        lines = client.receive(timeout=0.5)
+        if lines is None:
+            return None
+        pending = list(lines)
+
+
+def drain(client, duration=0.3):
+    client.pending = []
+    deadline = time.time() + duration
+    while time.time() < deadline:
+        if client.receive(timeout=0.1) is None:
+            return
+
+
+def test_protocol_extensions():
+    print("\n=== Test 8: RFC 1459/2812 protocol details ===")
+
+    # 1. Final parameter without a leading colon (registration + PRIVMSG + TOPIC)
+    alice = IRCClient("ext_alice")
+    if not alice.connect():
+        fail("✗ Setup failed (ext_alice)")
+        return
+    alice.send(f"PASS {PASSWORD}")
+    alice.send("NICK ext_alice")
+    alice.send("USER ext_alice 0 * Alice")
+    if wait_for(alice, " 001 "):
+        print("✓ USER accepted with colon-less realname")
+    else:
+        fail("✗ USER without colon-prefixed realname was rejected")
+        alice.close()
+        return
+
+    bob = IRCClient("ext_bob")
+    if not bob.connect() or not bob.register():
+        fail("✗ Setup failed (ext_bob)")
+        alice.close()
+        return
+
+    alice.send("PRIVMSG ext_bob hello")
+    line = wait_for(bob, "PRIVMSG ext_bob")
+    if line and line.endswith(":hello"):
+        print("✓ PRIVMSG delivered with colon-less text")
+    else:
+        fail(f"✗ PRIVMSG without colon not delivered correctly: {line!r}")
+
+    # 2. JOIN with comma-separated channels
+    alice.send("JOIN #ext_a,#ext_b")
+    got_a = wait_for(alice, "JOIN #ext_a")
+    got_b = wait_for(alice, "JOIN #ext_b")
+    if got_a and got_b:
+        print("✓ JOIN #a,#b joined both channels")
+    else:
+        fail(f"✗ Comma-separated JOIN failed: a={got_a!r} b={got_b!r}")
+    drain(alice)
+
+    alice.send("TOPIC #ext_a newtopic")
+    line = wait_for(alice, "TOPIC #ext_a")
+    if line and line.endswith(":newtopic"):
+        print("✓ TOPIC set with colon-less topic")
+    else:
+        fail(f"✗ TOPIC without colon not applied: {line!r}")
+
+    # Keys are matched positionally: #ext_k1 gets key1, #ext_k2 gets key2.
+    alice.send("JOIN #ext_k1,#ext_k2")
+    wait_for(alice, "JOIN #ext_k2")
+    alice.send("MODE #ext_k1 +k key1")
+    alice.send("MODE #ext_k2 +k key2")
+    wait_for(alice, "MODE #ext_k2")
+    drain(alice)
+    bob.send("JOIN #ext_k1,#ext_k2 key1,key2")
+    got_k1 = wait_for(bob, "JOIN #ext_k1")
+    got_k2 = wait_for(bob, "JOIN #ext_k2")
+    if got_k1 and got_k2:
+        print("✓ JOIN with comma-separated keys")
+    else:
+        fail(f"✗ JOIN with comma-separated keys failed: {got_k1!r} {got_k2!r}")
+    drain(bob)
+
+    # 3. Case-insensitive nickname collision
+    dup = IRCClient("EXT_ALICE")
+    if dup.connect():
+        dup.send(f"PASS {PASSWORD}")
+        dup.send("NICK EXT_ALICE")
+        if wait_for(dup, " 433 "):
+            print("✓ NICK collision detected case-insensitively")
+        else:
+            fail("✗ NICK EXT_ALICE accepted while ext_alice exists")
+        dup.close()
+
+    bob.send("PRIVMSG EXT_ALICE :case test")
+    line = wait_for(alice, "case test")
+    if line:
+        print("✓ PRIVMSG target nickname matched case-insensitively")
+    else:
+        fail("✗ PRIVMSG to differently-cased nickname not delivered")
+
+    # 4. Invitation follows a NICK change
+    alice.send("JOIN #ext_inv")
+    wait_for(alice, "JOIN #ext_inv")
+    alice.send("MODE #ext_inv +i")
+    wait_for(alice, "MODE #ext_inv")
+    carol = IRCClient("ext_carol")
+    if not carol.connect() or not carol.register():
+        fail("✗ Setup failed (ext_carol)")
+    else:
+        alice.send("INVITE ext_carol #ext_inv")
+        wait_for(carol, "INVITE")
+        carol.send("NICK ext_carol2")
+        wait_for(carol, "NICK")
+        carol.send("JOIN #ext_inv")
+        if wait_for(carol, "JOIN #ext_inv"):
+            print("✓ Invitation preserved across NICK change")
+        else:
+            fail("✗ Invited user could not join after NICK change")
+
+        # The old nickname must no longer carry the invitation.
+        dave = IRCClient("ext_carol")
+        if dave.connect() and dave.register():
+            dave.send("JOIN #ext_inv")
+            if wait_for(dave, " 473 "):
+                print("✓ Old nickname no longer invited")
+            else:
+                fail("✗ New user with the old nickname inherited the invite")
+        dave.close()
+    carol.close()
+
+    alice.close()
+    bob.close()
+
+
 if __name__ == "__main__":
     try:
         test_basic_connection()
@@ -445,6 +589,7 @@ if __name__ == "__main__":
         test_operator_commands()
         test_flood_stability()
         test_slow_reader_flood()
+        test_protocol_extensions()
     except KeyboardInterrupt:
         print("\nTests interrupted.")
         sys.exit(130)

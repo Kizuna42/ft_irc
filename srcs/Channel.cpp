@@ -1,6 +1,7 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "Server.hpp"
+#include "Message.hpp"
 #include <algorithm>
 
 Channel::Channel(const std::string& name, Server* server)
@@ -97,15 +98,15 @@ size_t Channel::getMemberCount() const {
 
 // Invite management
 void Channel::addInvite(const std::string& nickname) {
-	_invitedUsers.insert(nickname);
+	_invitedUsers.insert(ircToLower(nickname));
 }
 
 void Channel::removeInvite(const std::string& nickname) {
-	_invitedUsers.erase(nickname);
+	_invitedUsers.erase(ircToLower(nickname));
 }
 
 bool Channel::isInvited(const std::string& nickname) const {
-	return _invitedUsers.find(nickname) != _invitedUsers.end();
+	return _invitedUsers.find(ircToLower(nickname)) != _invitedUsers.end();
 }
 
 // Utility
