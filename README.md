@@ -52,7 +52,7 @@ This project implements an IRC server that speaks a subset of the IRC protocol (
 - `POLLOUT` on a client fd triggers `handleClientSend()`, which flushes as much of the client's send buffer as `send()` accepts.
 - `POLLERR`/`POLLHUP`/`POLLNVAL` closes and removes the connection.
 
-All sockets are non-blocking, so `recv()`/`send()` errors of `EAGAIN`/`EWOULDBLOCK` are treated as "try again later" rather than fatal errors. Other send errors, including `EINTR` in the current implementation, close the client connection. There is no per-client thread or blocking call anywhere in the loop.
+All sockets are non-blocking and are only read from or written to after `poll()` reports them ready. Following the 42 evaluation rules, `errno` is never inspected after `recv()`/`send()`: a `-1` from `recv()` closes the connection, while a `-1` from `send()` keeps the data buffered and retries on the next `POLLOUT` (a broken socket is reported by `poll()` as `POLLERR`/`POLLHUP` and closed). There is no per-client thread or blocking call anywhere in the loop.
 
 ### Client state machine and message framing
 
