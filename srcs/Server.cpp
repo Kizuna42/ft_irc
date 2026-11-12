@@ -12,6 +12,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <set>
+#include <stdexcept>
+
+volatile sig_atomic_t Server::s_shutdownRequested = 0;
 
 Server::Server(int port, const std::string& password)
 	: _serverFd(-1), _port(port), _password(password), _commandHandler(NULL), _running(false) {
@@ -30,7 +33,8 @@ void Server::start() {
 
 	std::cout << "IRC Server started on port " << _port << std::endl;
 
-	while (_running) {
+	while (_running && !s_shutdownRequested) {
+		updatePollEvents();
 		int pollCount = poll(&_pollFds[0], _pollFds.size(), -1);
 
 		if (pollCount < 0) {
@@ -56,6 +60,12 @@ void Server::start() {
 				continue;
 			}
 
+			// Already scheduled for disconnection: ignore further events.
+			if (isClosePending(current.fd)) {
+				++i;
+				continue;
+			}
+
 			if (current.revents & POLLIN) {
 				handleClientData(current.fd);
 				if (!getClient(current.fd))
@@ -76,7 +86,16 @@ void Server::start() {
 			if (!closed)
 				++i;
 		}
+
+		flushPendingCloses();
 	}
+
+	if (s_shutdownRequested)
+		std::cout << "\nShutting down server..." << std::endl;
+}
+
+void Server::requestShutdown() {
+	s_shutdownRequested = 1;
 }
 
 void Server::stop() {
@@ -88,6 +107,7 @@ void Server::stop() {
 		delete it->second;
 	}
 	_clients.clear();
+	_pendingClose.clear();
 
 	// Delete all channels
 	for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
@@ -169,12 +189,14 @@ void Server::disconnectClient(Client* client, const std::string& reason) {
 }
 
 void Server::sendToClient(Client* client, const std::string& message) {
-	if (!client || message.empty())
+	if (!client || message.empty() || isClosePending(client->getFd()))
 		return;
 
 	if (client->getSendBuffer().size() + message.size() > MAX_SEND_BUFFER_SIZE) {
 		std::cerr << "Warning: send buffer exceeded for fd " << client->getFd() << std::endl;
-		closeConnection(client->getFd(), "Send buffer exceeded");
+		// Do not close here: callers may be iterating over channel members
+		// or the channel map. The connection is closed after this poll cycle.
+		scheduleClose(client->getFd(), "Send buffer exceeded");
 		return;
 	}
 
@@ -300,7 +322,7 @@ void Server::handleNewConnection() {
 		// Add to poll
 		struct pollfd pfd;
 		pfd.fd = clientFd;
-		pfd.events = POLLIN | POLLOUT;
+		pfd.events = POLLIN;
 		pfd.revents = 0;
 		_pollFds.push_back(pfd);
 
@@ -339,12 +361,19 @@ void Server::handleClientData(int fd) {
 	// Process complete messages
 	while (true) {
 		Client* current = getClient(fd);
-		if (!current || !current->hasCompleteMessage())
+		if (!current || isClosePending(fd) || !current->hasCompleteMessage())
 			break;
 
 		std::string message = current->extractMessage();
 		if (!message.empty())
 			processClientMessage(current, message);
+	}
+
+	// Guard against a client that keeps sending data without a line break.
+	Client* current = getClient(fd);
+	if (current && current->getRecvBuffer().size() > MAX_RECV_BUFFER_SIZE) {
+		std::cerr << "Warning: receive buffer exceeded for fd " << fd << std::endl;
+		closeConnection(fd, "Input buffer exceeded");
 	}
 }
 
@@ -368,8 +397,43 @@ void Server::handleClientSend(int fd) {
 }
 
 void Server::closeConnection(int fd, const std::string& reason) {
+	_pendingClose.erase(fd);
 	close(fd);
 	removeClient(fd, reason);
+}
+
+void Server::scheduleClose(int fd, const std::string& reason) {
+	if (_pendingClose.find(fd) == _pendingClose.end())
+		_pendingClose[fd] = reason;
+}
+
+bool Server::isClosePending(int fd) const {
+	return _pendingClose.find(fd) != _pendingClose.end();
+}
+
+void Server::flushPendingCloses() {
+	// Closing a connection broadcasts QUIT, which may schedule more closes.
+	while (!_pendingClose.empty()) {
+		std::map<int, std::string>::iterator it = _pendingClose.begin();
+		int fd = it->first;
+		std::string reason = it->second;
+		_pendingClose.erase(it);
+		if (getClient(fd))
+			closeConnection(fd, reason);
+	}
+}
+
+void Server::updatePollEvents() {
+	// Only ask for POLLOUT when there is pending output; otherwise poll()
+	// would return immediately for every writable socket and spin the CPU.
+	for (size_t i = 0; i < _pollFds.size(); ++i) {
+		if (_pollFds[i].fd == _serverFd)
+			continue;
+		Client* client = getClient(_pollFds[i].fd);
+		_pollFds[i].events = POLLIN;
+		if (client && !client->getSendBuffer().empty())
+			_pollFds[i].events |= POLLOUT;
+	}
 }
 
 // Utility
