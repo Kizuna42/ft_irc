@@ -16,6 +16,8 @@
 
 volatile sig_atomic_t Server::s_shutdownRequested = 0;
 
+static const int POLL_TIMEOUT_MS = 1000;
+
 Server::Server(int port, const std::string& password)
 	: _serverFd(-1), _port(port), _password(password), _commandHandler(NULL), _running(false) {
 	_commandHandler = new CommandHandler(this);
@@ -35,7 +37,9 @@ void Server::start() {
 
 	while (_running && !s_shutdownRequested) {
 		updatePollEvents();
-		int pollCount = poll(&_pollFds[0], _pollFds.size(), -1);
+		// Finite timeout: a signal delivered between the loop-condition check
+		// and poll() does not interrupt poll(), so re-check the flag periodically.
+		int pollCount = poll(&_pollFds[0], _pollFds.size(), POLL_TIMEOUT_MS);
 
 		if (pollCount < 0) {
 			if (errno == EINTR)
