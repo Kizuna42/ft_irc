@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make CXX=${{ matrix.compiler }}
+
+      - name: Run integration tests
+        env:
+          IRC_PORT: "6667"
+          IRC_PASSWORD: password123
+        run: |
+          ./ircserv "$IRC_PORT" "$IRC_PASSWORD" > server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 1
+          status=0
+          timeout 300 python3 tests/reproduce_evaluation.py || status=$?
+          kill -INT "$SERVER_PID" || status=1
+          wait "$SERVER_PID" || status=1
+          echo "--- server log ---"
+          cat server.log
+          exit $status
+
+  sanitizers:
+    name: AddressSanitizer / UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with sanitizers
+        run: >
+          make CXXFLAGS="-Wall -Wextra -Werror -std=c++98 -I./includes -g
+          -fsanitize=address,undefined -fno-omit-frame-pointer -D_GLIBCXX_SANITIZE_VECTOR"
+
+      - name: Run integration tests under sanitizers
+        env:
+          IRC_PORT: "6667"
+          IRC_PASSWORD: password123
+          ASAN_OPTIONS: halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          ./ircserv "$IRC_PORT" "$IRC_PASSWORD" > server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 1
+          status=0
+          timeout 300 python3 tests/reproduce_evaluation.py || status=$?
+          kill -INT "$SERVER_PID" || status=1
+          wait "$SERVER_PID" || status=1
+          echo "--- server log ---"
+          cat server.log
+          if grep -qE "ERROR: (AddressSanitizer|LeakSanitizer)|runtime error:" server.log; then
+            status=1
+          fi
+          exit $status
